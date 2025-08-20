@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import localforage from 'localforage';
 import { useAuth0 } from '@auth0/auth0-react';
 import {
   Box,
@@ -42,21 +43,23 @@ function ProfileTab({ user }) {
 }
 
 function SessionsTab() {
-  // sessions will be array of { id, name, date, duration, audioURL }
   const [sessions, setSessions] = useState([]);
   const [selectedSession, setSelectedSession] = useState(null);
 
-  // Load sessions from localStorage on mount
+  // Load sessions from localForage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('sessions');
-    if (saved) {
-      setSessions(JSON.parse(saved));
-    }
+    const loadSessions = async () => {
+      const saved = (await localforage.getItem('sessions')) || [];
+      setSessions(saved);
+    };
+    loadSessions();
   }, []);
 
   // Select session to listen to
   const onSelectSession = (session) => {
-    setSelectedSession(session);
+    // Create a URL from the Blob for audio playback
+    const url = URL.createObjectURL(session.audioBlob);
+    setSelectedSession({ ...session, audioURL: url });
   };
 
   return (
@@ -130,12 +133,6 @@ function RecordTab() {
         audioChunksRef.current.push(event.data);
       };
 
-      mediaRecorderRef.current.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const url = URL.createObjectURL(audioBlob);
-        setAudioURL(url);
-      };
-
       mediaRecorderRef.current.start();
       setRecording(true);
     } catch (err) {
@@ -144,43 +141,46 @@ function RecordTab() {
     }
   };
 
-const stopRecording = () => {
-  mediaRecorderRef.current.onstop = () => {
-    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-    const url = URL.createObjectURL(audioBlob);
-    setAudioURL(url);
+  const stopRecording = async () => {
+    mediaRecorderRef.current.onstop = async () => {
+      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+      const url = URL.createObjectURL(audioBlob);
+      setAudioURL(url);
 
-    // Create a session object
-    const session = {
-      id: Date.now().toString(),
-      name: `Session ${new Date().toLocaleString()}`,
-      date: new Date().toLocaleString(),
-      // Duration is not exact here; you might improve this by measuring audio length
-      duration: Math.round(audioBlob.size / 16000), 
-      audioURL: url,
+      // Create session object
+      const session = {
+        id: Date.now().toString(),
+        name: `Session ${new Date().toLocaleString()}`,
+        date: new Date().toLocaleString(),
+        duration: Math.round(audioBlob.size / 16000),
+        audioBlob, // store the blob itself
+      };
+
+      // Retrieve old sessions
+      const oldSessions = (await localforage.getItem('sessions')) || [];
+      oldSessions.push(session);
+
+      // Save updated sessions
+      await localforage.setItem('sessions', oldSessions);
+      console.log('Session saved to localForage!');
     };
 
-    // Save session to localStorage
-    const oldSessions = JSON.parse(localStorage.getItem('sessions') || '[]');
-    oldSessions.push(session);
-    localStorage.setItem('sessions', JSON.stringify(oldSessions));
+    mediaRecorderRef.current.stop();
+    setRecording(false);
   };
 
-  mediaRecorderRef.current.stop();
-  setRecording(false);
-};
-
-
   return (
-    <Box sx={{
-          height: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          textAlign: 'center',
-          px: 2,
-        }}>
+    <Box
+      sx={{
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        textAlign: 'center',
+        px: 2,
+      }}
+    >
       {!recording ? (
         <Button variant="contained" onClick={startRecording}>
           Record New Session
