@@ -1,17 +1,21 @@
-# Install the assemblyai package by executing the command "pip install assemblyai"
+from flask import Flask, send_from_directory
+import os
 
-import assemblyai as aai
+app = Flask(__name__, static_folder='./my-awesome-app/dist')
 
-aai.settings.api_key = "b481c043ce814332a6456e7247f20720"
+# Serve React static files
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
 
-# audio_file = "./local_file.mp3"
-audio_file = "https://assembly.ai/wildfires.mp3"
+# Example API route
+@app.route('/api/hello')
+def hello():
+    return {"message": "Hello from backend!"}
 
-config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
-
-transcript = aai.Transcriber(config=config).transcribe(audio_file)
-
-if transcript.status == "error":
-  raise RuntimeError(f"Transcription failed: {transcript.error}")
-
-print(transcript.text)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
