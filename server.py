@@ -1,7 +1,7 @@
 from flask import Flask, send_from_directory
 import os
 
-app = Flask(__name__, static_folder='./my-awesome-app/dist')
+app = Flask(__name__, static_folder='my-awesome-app/dist')
 
 # Serve React static files
 @app.route('/', defaults={'path': ''})
